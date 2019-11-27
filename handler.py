@@ -4,6 +4,7 @@ import socket
 
 class FHandler:
 
+    __socket = None
     __file = None
     __size = 0
     __pos = 0
@@ -11,7 +12,19 @@ class FHandler:
     def __init__(self, request, socket):
         self.__socket = socket
         data = request.strip().split()
-        print(data)
+        if data[0].lower() == b'get':
+            path = data[1].strip(b'\\').replace(b'..', b'').replace(b'./', b'').decode()
+            path = os.path.dirname(os.path.realpath(__file__)) + '/files' + path
+            if os.path.isfile(path):
+                # file exists, open it
+                try:
+                    self.__file = open(path, 'rb')
+                    self.__file.seek(0, os.SEEK_END)
+                    self.__size = self.__file.tell()
+                    self.__file.seek(0, os.SEEK_SET)
+                except IOError:
+                    self.__file = None
+                    self.__size = 0
 
     @property
     def file(self):
@@ -22,12 +35,25 @@ class FHandler:
         return self.__size
     
     def send(self):
-        return False # in case of failed send
-        pass
+        data = self.__file.read(32)
+        end = False
+        if self.__file.tell() == self.__size:
+            end = True
+        if data is not None:
+            sent = self.__socket.send(data)
+            if not end and sent < 32:
+                self.__file.seek(0 - (32 - sent), os.SEEK_CUR)
+            if end:
+                return False
+            else:
+                return True
+        else:
+            self.__file.close()
+            return False
 
 class SEHandler:
 
-    __resp_200 = b'HTTP/1.0 200 OK\r\n\r\n'
+    __resp_200 = b'HTTP/1.0 200 OK\r\n'
     __resp_404 = b'HTTP/1.0 404 Not Found\r\n\r\n'
     __resp_cont = b'Content-Type: application/octet-stream\r\nContent-Length: %d\r\n\r\n'
 
@@ -49,7 +75,7 @@ class SEHandler:
             if b'\n\n' in self.__datain or b'\r\n\r\n' in self.__datain:
                 # end of request detected, process and swith to output
                 self.__epoll.modify(self.__socket.fileno(), select.EPOLLOUT)
-                self.__fhandler = FHandler(self.__datain, socket)
+                self.__fhandler = FHandler(self.__datain, self.__socket)
                 if self.__fhandler.file is None:
                     self.__dataout = self.__resp_404;
                 else:

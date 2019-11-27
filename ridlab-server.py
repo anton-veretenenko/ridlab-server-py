@@ -7,7 +7,7 @@ ssocket.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
 ssocket.bind(('127.0.0.1', 8181))
 ssocket.listen(1)
 ssocket.setblocking(0)
- 
+
 epoll = select.epoll()
 epoll.register(ssocket.fileno(), select.EPOLLIN)
  
